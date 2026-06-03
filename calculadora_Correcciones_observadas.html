@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora Gravimétrica</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- SheetJS (opcional, solo para leer/escribir .xlsx). Si no hay internet, CSV/pegar siguen funcionando. -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a; --surface: #111827; --surface2: #1a2233; --border: #2a3a52;
+    --accent: #00d4ff; --accent2: #7c3aed; --accent3: #f59e0b;
+    --text: #e2e8f0; --text-muted: #64748b; --success: #10b981;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Syne', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+  .wrapper { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+
+  header { text-align: center; margin-bottom: 2rem; }
+  .logo-badge { display: inline-flex; align-items: center; gap: .5rem; background: linear-gradient(135deg,var(--accent2),var(--accent)); padding: .35rem 1rem; border-radius: 99px; font-size: .7rem; font-family: 'Space Mono',monospace; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 1rem; }
+  h1 { font-size: clamp(1.8rem,4vw,3rem); font-weight: 800; line-height: 1.1; background: linear-gradient(135deg,#fff 30%,var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  header p { color: var(--text-muted); margin-top: .5rem; font-size: .92rem; }
+  header .credits { color:#5b6b85; font-size:.72rem; font-family:'Space Mono',monospace; margin-top:.6rem; }
+
+  .prog-bar { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 2rem; }
+  .prog-fill { height: 100%; background: linear-gradient(90deg,var(--accent2),var(--accent)); border-radius: 4px; transition: width .4s ease; }
+
+  .steps-nav { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-bottom: 2.2rem; flex-wrap: wrap; }
+  .step-dot { display: flex; align-items: center; gap: .4rem; font-size: .73rem; font-family: 'Space Mono',monospace; color: var(--text-muted); transition: color .3s; }
+  .step-dot.active { color: var(--accent); }
+  .step-dot.done { color: var(--success); }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .7rem; transition: background .3s; }
+  .step-dot.active .step-num { background: var(--accent); border-color: var(--accent); color: #000; }
+  .step-dot.done .step-num { background: var(--success); border-color: var(--success); color: #fff; }
+  .step-connector { width: 22px; height: 2px; background: var(--border); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 4px 40px rgba(0,0,0,.4); }
+  .card-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-bottom: 1.3rem; display: flex; align-items: center; gap: .5rem; }
+  .card-title::before { content: ''; width: 4px; height: 20px; background: linear-gradient(var(--accent),var(--accent2)); border-radius: 4px; }
+
+  label { display: block; font-size: .78rem; font-family: 'Space Mono',monospace; color: var(--text-muted); margin-bottom: .4rem; text-transform: uppercase; letter-spacing: .05em; }
+  input[type=text], input[type=number], select, textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Space Mono',monospace; font-size: .9rem; padding: .65rem 1rem; transition: border-color .2s,box-shadow .2s; outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,212,255,.15); }
+  textarea { resize: vertical; min-height: 120px; line-height:1.5; }
+  .field-group { margin-bottom: 1.2rem; }
+  .hint { font-size: .78rem; color: var(--text-muted); margin-top: .3rem; font-family: 'Space Mono',monospace; line-height:1.5; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  @media(max-width:600px) { .grid2,.grid3 { grid-template-columns: 1fr; } }
+
+  .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .75rem 1.8rem; border-radius: 8px; font-family: 'Syne',sans-serif; font-weight: 700; font-size: .9rem; cursor: pointer; border: none; transition: transform .15s,box-shadow .2s; }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg,var(--accent2),var(--accent)); color: #fff; box-shadow: 0 4px 20px rgba(0,212,255,.25); }
+  .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .btn-success { background: linear-gradient(135deg,#059669,#10b981); color: #fff; box-shadow: 0 4px 20px rgba(16,185,129,.25); }
+  .btn-amber { background: linear-gradient(135deg,#d97706,#f59e0b); color:#1a1200; }
+  .btn-sm { padding: .5rem 1rem; font-size:.8rem; }
+  .btn-group { display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; }
+
+  .step-panel { display: none; }
+  .step-panel.active { display: block; animation: fadeIn .35s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: none; } }
+
+  .grav-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1.2rem; }
+  @media(max-width:500px) { .grav-grid { grid-template-columns: 1fr; } }
+  .grav-card { border: 2px solid var(--border); border-radius: 12px; padding: 1.6rem 1rem; text-align: center; cursor: pointer; transition: border-color .2s,transform .15s,background .2s; background: var(--surface2); }
+  .grav-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .grav-card.selected { border-color: var(--accent); background: rgba(0,212,255,.08); box-shadow: 0 0 0 3px rgba(0,212,255,.15); }
+  .grav-icon { font-size: 2.4rem; margin-bottom: .6rem; }
+  .grav-name { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+  .grav-desc { font-size: .72rem; font-family: 'Space Mono',monospace; color: var(--text-muted); margin-top: .4rem; line-height: 1.5; }
+
+  .info-box { background: rgba(0,212,255,.07); border: 1px solid rgba(0,212,255,.25); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1.2rem; font-size: .85rem; line-height: 1.6; }
+  .info-box strong { color: var(--accent3); }
+  .info-box.amber { background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.3); }
+  .mono { font-family: 'Space Mono',monospace; color: var(--accent); font-size: .82rem; }
+
+  .import-bar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; background:var(--surface2); border:1px dashed var(--border); border-radius:10px; padding:.8rem 1rem; margin-bottom:1rem; }
+  .import-bar .lbl { font-family:'Space Mono',monospace; font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; color:var(--accent3); margin-right:.3rem; }
+  .file-btn { position:relative; overflow:hidden; }
+  .file-btn input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+
+  .table-scroll { overflow-x: auto; }
+  table.data-input { border-collapse: collapse; width: 100%; min-width: 420px; }
+  table.data-input th { background: var(--surface2); border: 1px solid var(--border); padding: .5rem .7rem; font-size: .75rem; font-family: 'Space Mono',monospace; color: var(--accent); text-align: center; white-space: nowrap; }
+  table.data-input td { border: 1px solid var(--border); padding: .2rem .25rem; }
+  table.data-input td.row-label { text-align: left; padding: .4rem .7rem; font-size: .74rem; color: var(--text-muted); font-family: 'Space Mono',monospace; white-space:nowrap; background:rgba(255,255,255,.015); }
+  table.data-input tr.meta td.row-label { color: var(--accent3); }
+  table.data-input td input { border: none; background: transparent; width: 100%; min-width: 86px; padding: .45rem .5rem; text-align: center; font-size: .86rem; font-family: 'Space Mono',monospace; color: var(--text); }
+  table.data-input td input:focus { background: rgba(0,212,255,.08); box-shadow: inset 0 0 0 2px var(--accent); border-radius: 4px; outline: none; }
+
+  .section-label { font-size: .7rem; font-family: 'Space Mono',monospace; text-transform: uppercase; letter-spacing: .12em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: .4rem; margin: 1.5rem 0 1rem; }
+
+  .lookup-preview { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; }
+  .lookup-header { background: rgba(0,212,255,.1); padding: .65rem 1rem; font-size: .75rem; font-family: 'Space Mono',monospace; color: var(--accent); }
+  table.lookup-tbl { border-collapse: collapse; width: 100%; min-width: 320px; }
+  table.lookup-tbl th { background: var(--surface2); padding: .4rem .9rem; font-size: .72rem; font-family: 'Space Mono',monospace; color: var(--text-muted); text-align: center; border-bottom: 1px solid var(--border); }
+  table.lookup-tbl td { padding: .38rem .9rem; font-size: .8rem; font-family: 'Space Mono',monospace; text-align: center; border-bottom: 1px solid rgba(255,255,255,.04); }
+  table.lookup-tbl tr.hl td { background: rgba(0,212,255,.15); color: var(--accent); font-weight: 700; }
+
+  .result-wrapper { overflow-x: auto; }
+  table.result-table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .8rem; }
+  table.result-table th { background: #1e2a3d; border: 1px solid var(--border); padding: .5rem 1rem; text-align: center; font-family: 'Space Mono',monospace; color: var(--accent); white-space: nowrap; }
+  table.result-table td { border: 1px solid var(--border); padding: .42rem .9rem; text-align: center; font-family: 'Space Mono',monospace; }
+  table.result-table .row-header { font-weight: 700; text-align: left; white-space: nowrap; padding-left: 1rem; }
+  table.result-table .row-meta td { background: rgba(245,158,11,.10); color:#fcd34d; }
+  table.result-table .row-dato td { background: rgba(255,255,255,.02); }
+  table.result-table .row-sep td { height: 8px; background: transparent; border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-top: none; border-bottom: none; }
+  table.result-table .row-media td { background: rgba(14,116,144,.25); color: #67e8f9; }
+  table.result-table .row-cen td { background: rgba(22,101,52,.22); color: #6ee7b7; }
+  table.result-table .row-ref td { background: rgba(107,33,168,.22); color: #d8b4fe; }
+  table.result-table .row-res td { background: rgba(154,52,18,.20); color: #fdba74; }
+  table.result-table .row-sup td { background: rgba(120,53,15,.20); color: #fcd34d; }
+  table.result-table .row-lec td { background: rgba(30,58,95,.30); color: #93c5fd; }
+  table.result-table .row-gob td { background: rgba(153,27,27,.32); color: #fca5a5; font-weight: 700; }
+  table.result-table .row-corr td { background: rgba(124,58,237,.14); color:#c4b5fd; }
+  table.result-table .row-ctot td { background: rgba(124,58,237,.40); color:#ede9fe; font-weight: 700; border-top: 2px solid var(--accent2); }
+  table.result-table .row-gcorr td { background: rgba(16,185,129,.32); color:#a7f3d0; font-weight: 700; }
+
+  .params-bar { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.2rem; }
+  .param-chip { display: inline-flex; align-items: center; gap: .4rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: .35rem .75rem; font-family: 'Space Mono',monospace; font-size: .75rem; }
+  .param-chip span { color: var(--accent3); font-weight: 700; }
+
+  .chart-box { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:1rem 1.2rem; margin-top:1.2rem; }
+  .chart-box h3 { font-size:.9rem; color:var(--accent); margin-bottom:.2rem; }
+  .chart-box .cap { font-size:.74rem; color:var(--text-muted); font-family:'Space Mono',monospace; margin-bottom:.6rem; }
+  .chart-box svg { width:100%; height:auto; display:block; }
+
+  @media(max-width:480px) { .card { padding: 1.2rem; } }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="logo-badge">⚖ Sistema Gravimétrico</div>
+    <h1>Calculadora<br>Gravimétrica</h1>
+    <p>Procesamiento completo · tablas G-043 · G-069 · G-673 · correcciones gravimétricas</p>
+    <div class="credits">Universidad Distrital Francisco José de Caldas — Geodesia Física GR 62 · Oscar Manuel Uribe Rincón 20211025063</div>
+  </header>
+
+  <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:20%"></div></div>
+
+  <div class="steps-nav">
+    <div class="step-dot active" id="sdot1"><div class="step-num">1</div><span>Gravímetro</span></div>
+    <div class="step-connector"></div>
+    <div class="step-dot" id="sdot2"><div class="step-num">2</div><span>Estructura</span></div>
+    <div class="step-connector"></div>
+    <div class="step-dot" id="sdot3"><div class="step-num">3</div><span>Datos / Tablas</span></div>
+    <div class="step-connector"></div>
+    <div class="step-dot" id="sdot4"><div class="step-num">4</div><span>Constantes</span></div>
+    <div class="step-connector"></div>
+    <div class="step-dot" id="sdot5"><div class="step-num">5</div><span>Resultado</span></div>
+  </div>
+
+  <!-- ══ PASO 1 ══ -->
+  <div class="step-panel active" id="step1">
+    <div class="card">
+      <div class="card-title">Paso 1 — Gravímetro y tabla de referencia</div>
+      <p class="hint" style="margin-bottom:1.3rem">
+        Se consultará automáticamente la tabla del instrumento para obtener
+        <strong style="color:var(--accent3)">referentII</strong> (Valor) y el
+        <strong style="color:var(--accent3)">factor de intervalo</strong> según la centena inferior
+        (<span class="mono">cenmenorI</span>) de cada columna.
+      </p>
+      <div class="grav-grid">
+        <div class="grav-card" id="gc-g043" onclick="selectGrav('g043')">
+          <div class="grav-icon">🔬</div><div class="grav-name">G-043</div>
+          <div class="grav-desc">Factor base ≈ 1.04600<br>Rango 0 – 7000</div>
+        </div>
+        <div class="grav-card" id="gc-g069" onclick="selectGrav('g069')">
+          <div class="grav-icon">⚗️</div><div class="grav-name">G-069</div>
+          <div class="grav-desc">Factor base ≈ 1.02935<br>Rango 0 – 7000</div>
+        </div>
+        <div class="grav-card" id="gc-g673" onclick="selectGrav('g673')">
+          <div class="grav-icon">🧪</div><div class="grav-name">G-673</div>
+          <div class="grav-desc">Factor base ≈ 1.02235<br>Rango 0 – 7000</div>
+        </div>
+      </div>
+
+      <div class="import-bar">
+        <span class="lbl">Tabla de referencia propia</span>
+        <button class="btn btn-secondary btn-sm file-btn">📁 Subir CSV / Excel (Lectura, Valor, Factor)
+          <input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange="loadRefTable(this)"></button>
+        <span class="hint" id="refTableMsg" style="margin:0"></span>
+      </div>
+      <div class="import-bar">
+        <span class="lbl">Cargar datos al inicio</span>
+        <button class="btn btn-amber btn-sm file-btn">📊 Archivo de datos .xlsx / .csv
+          <input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange="loadDataEarly(this)"></button>
+        <span class="hint" style="margin:0">Selecciona un gravímetro y sube tu tabla (ej: DATOS.xlsx).</span>
+      </div>
+
+      <div id="gravBox" class="info-box" style="display:none"></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnStep1" onclick="goStep2()" disabled style="opacity:.4">
+          Continuar → Estructura
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PASO 2 ══ -->
+  <div class="step-panel" id="step2">
+    <div class="card">
+      <div class="card-title">Paso 2 — Estructura de la tabla</div>
+      <div class="grid2">
+        <div class="field-group">
+          <label>Número de columnas / estaciones (1–12)</label>
+          <input type="number" id="numCols" min="1" max="12" value="3">
+          <p class="hint">Cada columna = una estación de medición.</p>
+        </div>
+        <div class="field-group">
+          <label>Filas de datos capturados (1–20)</label>
+          <input type="number" id="numRows" min="1" max="20" value="4">
+          <p class="hint">Lecturas repetidas por estación (se promedian).</p>
+        </div>
+      </div>
+      <div class="section-label">Nombres de encabezados de columna</div>
+      <div class="grid3" id="headersGrid"></div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goStep(1)">← Volver</button>
+        <button class="btn btn-primary" onclick="goStep3()">Continuar → Ingresar datos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PASO 3 ══ -->
+  <div class="step-panel" id="step3">
+    <div class="card">
+      <div class="card-title">Paso 3 — Datos de medición (o importar tabla)</div>
+      <div class="info-box">
+        Gravímetro: <strong id="gravLabel3"></strong>. Cada columna lleva sus metadatos
+        (<span class="mono">hora</span>, <span class="mono">latitud</span>, <span class="mono">altura</span>)
+        y sus lecturas. La hora acepta <span class="mono">HH:MM</span> o <span class="mono">HH:MM AM/PM</span>.
+      </div>
+
+      <div class="import-bar">
+        <span class="lbl">Importar tabla</span>
+        <button class="btn btn-secondary btn-sm" onclick="togglePaste()">📋 Pegar</button>
+        <button class="btn btn-secondary btn-sm file-btn">📁 Archivo CSV / Excel
+          <input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange="loadDataFile(this)"></button>
+        <button class="btn btn-amber btn-sm" onclick="loadExample()">✨ Cargar ejemplo</button>
+      </div>
+
+      <div id="pastePanel" style="display:none; margin-bottom:1rem">
+        <p class="hint" style="margin-bottom:.4rem">
+          Pega una tabla (desde Excel, con TAB, o separada por <span class="mono">,</span> / <span class="mono">;</span>).
+          Formato por filas: <strong>1)</strong> nombres · <strong>2)</strong> hora · <strong>3)</strong> latitud · <strong>4)</strong> altura · <strong>5+)</strong> lecturas.
+          Una primera columna de etiquetas es opcional.
+        </p>
+        <textarea id="pasteArea" placeholder="Estacion A&#9;Estacion B&#9;Estacion C
+07:30&#9;08:10&#9;09:05
+4.61&#9;4.63&#9;4.65
+2600&#9;2610&#9;2625
+2881.2&#9;2884.5&#9;2890.1
+2881.4&#9;2884.7&#9;2890.0"></textarea>
+        <div class="btn-group" style="margin-top:.7rem">
+          <button class="btn btn-primary btn-sm" onclick="importPaste()">Cargar en la tabla</button>
+          <button class="btn btn-secondary btn-sm" onclick="togglePaste()">Cancelar</button>
+        </div>
+      </div>
+
+      <div class="table-scroll" id="dataTableContainer"></div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goStep(2)">← Volver</button>
+        <button class="btn btn-primary" onclick="goStep4()">Continuar → Constantes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PASO 4 ══ -->
+  <div class="step-panel" id="step4">
+    <div class="card">
+      <div class="card-title">Paso 4 — Constante global ger</div>
+      <p class="hint" style="margin-bottom:1.2rem">
+        <span class="mono">ger</span> es la gravedad observada absoluta de la estación base.
+        El <span class="mono">gobs</span> de cada columna se calcula como
+        <span class="mono">ger + (lecminigl − lecminigl_base)</span>, con la columna 1 como base.
+      </p>
+      <div class="grid2">
+        <div class="field-group">
+          <label>ger — gravedad de referencia (mGal)</label>
+          <input type="number" id="gerVal" step="any" placeholder="Ej: 978234.567">
+          <p class="hint">Se trunca a 5 decimales (igual que el programa).</p>
+        </div>
+      </div>
+      <div class="section-label">Vista previa — consulta de tabla <span id="gravLabelPreview"></span></div>
+      <div id="lookupPreview"></div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goStep(3)">← Volver</button>
+        <button class="btn btn-success" onclick="calcular()">⚡ Calcular resultados</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PASO 5 ══ -->
+  <div class="step-panel" id="step5">
+    <div class="card">
+      <div class="card-title">Paso 5 — Resultados completos</div>
+      <div class="params-bar" id="paramsSummary"></div>
+      <div class="result-wrapper" id="resultContainer"></div>
+      <div id="chartContainer"></div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="goStep(4)">← Editar constantes</button>
+        <button class="btn btn-success" onclick="exportCSV()">⬇ Exportar CSV</button>
+        <button class="btn btn-amber" onclick="exportXLSX()">⬇ Exportar Excel</button>
+        <button class="btn btn-primary" onclick="reiniciar()">↺ Nueva tabla</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+/* ════════════════ TABLAS DE REFERENCIA EMBEBIDAS ════════════════ */
+const TABLAS = {
+  g043: [[0,0.00,1.04600],[100,104.60,1.04580],[200,209.18,1.04560],[300,313.74,1.04535],[400,418.28,1.04510],[500,522.79,1.04470],[600,627.26,1.04455],[700,731.71,1.04465],[800,836.18,1.04530],[900,940.71,1.04525],[1000,1045.23,1.04520],[1100,1149.75,1.04515],[1200,1254.27,1.04515],[1300,1358.78,1.04515],[1400,1463.29,1.04525],[1500,1567.82,1.04535],[1600,1672.35,1.04545],[1700,1776.90,1.04550],[1800,1881.45,1.04555],[1900,1986.00,1.04560],[2000,2090.56,1.04560],[2100,2195.12,1.04565],[2200,2299.69,1.04575],[2300,2404.26,1.04580],[2400,2508.84,1.04585],[2500,2613.43,1.04590],[2600,2718.02,1.04600],[2700,2822.61,1.04605],[2800,2927.22,1.04615],[2900,3031.83,1.04625],[3000,3136.46,1.04635],[3100,3241.10,1.04650],[3200,3345.75,1.04660],[3300,3450.41,1.04670],[3400,3555.08,1.04685],[3500,3659.76,1.04695],[3600,3764.45,1.04700],[3700,3869.15,1.04710],[3800,3973.86,1.04715],[3900,4078.58,1.04725],[4000,4183.30,1.04725],[4100,4288.03,1.04725],[4200,4392.75,1.04715],[4300,4497.47,1.04715],[4400,4602.19,1.04720],[4500,4706.90,1.04735],[4600,4811.64,1.04765],[4700,4916.40,1.04775],[4800,5021.18,1.04780],[4900,5125.96,1.04780],[5000,5230.74,1.04770],[5100,5335.51,1.04765],[5200,5440.28,1.04760],[5300,5545.04,1.04760],[5400,5649.80,1.04760],[5500,5754.56,1.04770],[5600,5859.33,1.04780],[5700,5964.11,1.04780],[5800,6068.89,1.04780],[5900,6173.67,1.04775],[6000,6278.45,1.04775],[6100,6383.22,1.04765],[6200,6487.99,1.04760],[6300,6592.75,1.04745],[6400,6697.49,1.04725],[6500,6802.22,1.04705],[6600,6906.92,1.04680],[6700,7011.60,1.04655],[6800,7116.26,1.04625],[6900,7220.88,1.04600],[7000,7325.48,1.04600]],
+  g069: [[0,0.00,1.02935],[100,102.94,1.02932],[200,205.87,1.02930],[300,308.80,1.02927],[400,411.72,1.02925],[500,514.65,1.02925],[600,617.57,1.02923],[700,720.50,1.02921],[800,823.42,1.02922],[900,926.34,1.02922],[1000,1029.26,1.02923],[1100,1132.19,1.02925],[1200,1235.11,1.02928],[1300,1338.04,1.02933],[1400,1440.97,1.02938],[1500,1543.91,1.02945],[1600,1646.85,1.02956],[1700,1749.81,1.02971],[1800,1852.78,1.02985],[1900,1955.77,1.02996],[2000,2058.76,1.03000],[2100,2161.76,1.03001],[2200,2264.76,1.03005],[2300,2367.77,1.03012],[2400,2470.78,1.03024],[2500,2573.80,1.03039],[2600,2676.84,1.03057],[2700,2779.90,1.03079],[2800,2882.98,1.03105],[2900,2986.08,1.03127],[3000,3089.21,1.03143],[3100,3192.35,1.03153],[3200,3295.51,1.03163],[3300,3398.67,1.03170],[3400,3501.84,1.03177],[3500,3605.02,1.03180],[3600,3708.20,1.03185],[3700,3811.38,1.03207],[3800,3914.59,1.03233],[3900,4017.82,1.03254],[4000,4121.08,1.03272],[4100,4224.35,1.03284],[4200,4327.63,1.03294],[4300,4430.93,1.03302],[4400,4534.23,1.03307],[4500,4637.53,1.03307],[4600,4740.84,1.03307],[4700,4844.15,1.03313],[4800,4947.46,1.03323],[4900,5050.78,1.03339],[5000,5154.12,1.03350],[5100,5257.47,1.03357],[5200,5360.83,1.03359],[5300,5464.19,1.03357],[5400,5567.55,1.03353],[5500,5670.90,1.03345],[5600,5774.24,1.03334],[5700,5877.58,1.03319],[5800,5980.90,1.03307],[5900,6084.20,1.03302],[6000,6187.51,1.03299],[6100,6290.81,1.03290],[6200,6394.10,1.03277],[6300,6497.37,1.03261],[6400,6600.63,1.03242],[6500,6703.88,1.03220],[6600,6807.10,1.03197],[6700,6910.29,1.03170],[6800,7013.46,1.03140],[6900,7116.60,1.03110],[7000,7219.71,1.03110]],
+  g673: [[0,0.00,1.02235],[100,102.24,1.02208],[200,204.44,1.02186],[300,306.68,1.02167],[400,408.80,1.02147],[500,510.94,1.02129],[600,613.97,1.02112],[700,715.12,1.02098],[800,817.22,1.02084],[900,919.37,1.02070],[1000,1021.44,1.02056],[1100,1123.49,1.02044],[1200,1225.54,1.02035],[1300,1327.57,1.02022],[1400,1429.60,1.02024],[1500,1531.62,1.02020],[1600,1633.64,1.02018],[1700,1735.66,1.02017],[1800,1837.68,1.02017],[1900,1939.70,1.02017],[2000,2041.71,1.02018],[2100,2143.73,1.02018],[2200,2245.75,1.02017],[2300,2347.77,1.02018],[2400,2449.76,1.02020],[2500,2555.18,1.02022],[2600,2653.83,1.02027],[2700,2755.85,1.02031],[2800,2857.88,1.02037],[2900,2959.92,1.02042],[3000,3061.06,1.02050],[3100,3164.01,1.02057],[3200,3266.07,1.02065],[3300,3368.13,1.02072],[3400,3470.21,1.02078],[3500,3572.28,1.02085],[3600,3674.37,1.02092],[3700,3776.46,1.02101],[3800,3878.56,1.02107],[3900,3980.67,1.02113],[4000,4082.78,1.02119],[4100,4184.90,1.02124],[4200,4287.03,1.02129],[4300,4389.15,1.02136],[4400,4491.29,1.02141],[4500,4593.43,1.02145],[4600,4695.58,1.02143],[4700,4797.72,1.02152],[4800,4899.88,1.02153],[4900,5002.03,1.02154],[5000,5104.18,1.02156],[5100,5206.34,1.02156],[5200,5308.50,1.02154],[5300,5410.65,1.02152],[5400,5512.80,1.02149],[5500,5614.95,1.02147],[5600,5717.10,1.02142],[5700,5819.24,1.02137],[5800,5921.38,1.02137],[5900,6023.51,1.02129],[6000,6125.63,1.02122],[6100,6227.74,1.02113],[6200,6329.84,1.02093],[6300,6431.93,1.02090],[6400,6534.01,1.02077],[6500,6636.07,1.02063],[6600,6738.12,1.02048],[6700,6840.15,1.02032],[6800,6942.17,1.02017],[6900,7044.17,1.02000],[7000,7146.15,1.01988]]
+};
+const GRAV_LABELS = { g043:'G-043', g069:'G-069', g673:'G-673' };
+const R_EARTH = 6378.137;
+
+let S = { grav:null, refTable:null, nCols:3, nRows:4, headers:[],
+          hora:[], lat:[], alt:[], data:[], ger:0 };
+let step = 1;
+
+/* ════════════════ UTILIDADES (idénticas al Python) ════════════════ */
+const trunc5 = x => (isFinite(x) ? Math.trunc(x*1e5)/1e5 : x);
+const trunc3 = x => (isFinite(x) ? Math.trunc(x*1e3)/1e3 : x);  // correcciones a 3 decimales
+const trunc8 = x => (isFinite(x) ? Math.trunc(x*1e8)/1e8 : x);
+const floorHundred = v => Math.floor(v/100)*100;
+
+function parseTime(raw){
+  if(raw===null||raw===undefined) return NaN;
+  let s = String(raw).trim(); if(!s) return NaN;
+  let ampm = null;
+  const um = s.toUpperCase().replace(/\./g,'').match(/(AM|PM)\s*$/);
+  if(um){ ampm = um[1]; s = s.toUpperCase().replace(/\./g,'').replace(/(AM|PM)\s*$/,'').trim(); }
+  const parts = s.replace(/\./g,':').split(':');
+  if(parts.length>=2){
+    let h = parseInt(parts[0],10), mn = parseInt(parts[1],10);
+    if(isNaN(h)||isNaN(mn)) return NaN;
+    if(ampm){ if(ampm==='PM'&&h!==12) h+=12; else if(ampm==='AM'&&h===12) h=0; }
+    return h + mn/60;
+  }
+  const f = parseFloat(s); return isNaN(f)?NaN:f;
+}
+
+function lookup(table, lectura){
+  const row = table.find(r=>r[0]===lectura);
+  if(row) return {valor:row[1], factor:row[2]};
+  const below = table.filter(r=>r[0]<=lectura).sort((a,b)=>b[0]-a[0]);
+  if(below.length) return {valor:below[0][1], factor:below[0][2]};
+  return {valor:table[0][1], factor:table[0][2]};
+}
+function curTable(){ return S.refTable || TABLAS[S.grav]; }
+function cenmenor(v){ return floorHundred(v); }
+function colMedia(c){
+  const vals = S.data.map(r=>r[c]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).map(Number);
+  return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+}
+
+/* ════════════════ NAVEGACIÓN ════════════════ */
+function goStep(n){
+  document.getElementById('step'+step).classList.remove('active');
+  document.getElementById('sdot'+step).classList.remove('active');
+  document.getElementById('sdot'+step).classList.add('done');
+  step = n;
+  document.getElementById('step'+n).classList.add('active');
+  document.getElementById('sdot'+n).classList.remove('done');
+  document.getElementById('sdot'+n).classList.add('active');
+  document.getElementById('progFill').style.width = (n*20)+'%';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ════════════════ PASO 1 ════════════════ */
+function selectGrav(k){
+  S.grav = k;
+  document.querySelectorAll('.grav-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('gc-'+k).classList.add('selected');
+  const b = document.getElementById('gravBox');
+  b.style.display='block';
+  b.innerHTML = `✔ Seleccionado: <strong>${GRAV_LABELS[k]}</strong>. Los parámetros <span class="mono">referentII</span> y <span class="mono">factor</span> se obtendrán automáticamente de la tabla según la <span class="mono">cenmenorI</span> de cada columna.`;
+  const btn = document.getElementById('btnStep1'); btn.disabled=false; btn.style.opacity='1';
+}
+/* Lector unificado de archivos → matriz de celdas. Soporta CSV y Excel.
+   Las celdas de hora de Excel (tipo time/date) se convierten a su texto
+   formateado ("7:00:00") para que parseTime las entienda; los números se
+   conservan con precisión completa. */
+function readTableFile(file, onMatrix){
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  const rd = new FileReader();
+  if(ext === 'csv' || ext === 'txt'){
+    rd.onload = e => onMatrix(parseDelimited(e.target.result));
+    rd.readAsText(file,'utf-8');
+  } else {  // xlsx / xlsm
+    if(typeof XLSX === 'undefined'){ alert('La lectura de Excel requiere conexión (SheetJS). Usa CSV o Pegar.'); return; }
+    rd.onload = e => {
+      try{
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, {header:1, raw:true,  defval:''});
+        const fmt = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+        const M = raw.map((row,i)=>row.map((c,j)=>
+          (c instanceof Date) ? String((fmt[i]&&fmt[i][j])||'') : c));
+        onMatrix(M);
+      }catch(err){ alert('No se pudo leer el Excel: '+err.message); }
+    };
+    rd.readAsArrayBuffer(file);
+  }
+}
+
+/* Tabla de referencia personalizada (CSV o Excel) con columnas Lectura,Valor,Factor */
+function loadRefTable(input){
+  const file = input.files[0]; if(!file) return;
+  readTableFile(file, M => {
+    try{
+      const rows = M.filter(r=>r.length>=3 && r.some(c=>c!==''&&c!==undefined&&c!==null));
+      const tbl=[]; let start=0;
+      if(rows.length && isNaN(parseFloat(rows[0][0]))) start=1; // saltar encabezado
+      for(let i=start;i<rows.length;i++){
+        const L=parseInt(parseFloat(rows[i][0])), V=parseFloat(rows[i][1]), Fa=parseFloat(rows[i][2]);
+        if(!isNaN(L)&&!isNaN(V)&&!isNaN(Fa)) tbl.push([L,V,Fa]);
+      }
+      if(!tbl.length) throw new Error('sin filas válidas (se esperan columnas Lectura, Valor, Factor)');
+      tbl.sort((a,b)=>a[0]-b[0]);
+      S.refTable = tbl;
+      document.getElementById('refTableMsg').innerHTML = `✔ Tabla cargada (${tbl.length} filas · ${escapeHtml(file.name)}). Reemplaza a la embebida.`;
+    }catch(err){ document.getElementById('refTableMsg').textContent='✗ Error: '+err.message; }
+  });
+  input.value='';
+}
+
+/* Cargar el archivo de datos completo desde el inicio (paso 1) */
+function loadDataEarly(input){
+  const file = input.files[0]; if(!file) return;
+  if(!S.grav){ alert('Selecciona primero un gravímetro.'); input.value=''; return; }
+  readTableFile(file, M => { if(ingestMatrix(M)) goStep(3); });
+  input.value='';
+}
+
+function goStep2(){ buildHeaders(); goStep(2); }
+function buildHeaders(){
+  const n = clampInt('numCols',1,12,3);
+  let h='';
+  for(let i=0;i<n;i++){
+    const v = S.headers[i] || `Estacion ${i+1}`;
+    h += `<div class="field-group"><label>Col ${i+1}</label><input type="text" id="hdr${i}" value="${escapeAttr(v)}" placeholder="Nombre columna ${i+1}"></div>`;
+  }
+  document.getElementById('headersGrid').innerHTML = h;
+}
+
+/* ════════════════ PASO 3 — tabla de datos ════════════════ */
+function clampInt(id,min,max,def){
+  const v = parseInt(document.getElementById(id).value);
+  return Math.min(max,Math.max(min, isNaN(v)?def:v));
+}
+function goStep3(){
+  S.nCols = clampInt('numCols',1,12,3);
+  S.nRows = clampInt('numRows',1,20,4);
+  S.headers = [];
+  for(let i=0;i<S.nCols;i++){
+    const el = document.getElementById('hdr'+i);
+    S.headers.push(el ? (el.value.trim()||`Estacion ${i+1}`) : `Estacion ${i+1}`);
+  }
+  document.getElementById('gravLabel3').textContent = GRAV_LABELS[S.grav] + (S.refTable?' (CSV)':'');
+  renderDataTable();
+  goStep(3);
+}
+function renderDataTable(){
+  let t = `<table class="data-input"><thead><tr><th>Parámetro</th>`;
+  for(let c=0;c<S.nCols;c++) t += `<th><input type="text" id="hd${c}" value="${escapeAttr(S.headers[c]||('Estacion '+(c+1)))}" style="min-width:110px;color:var(--accent);font-weight:700"></th>`;
+  t += `</tr></thead><tbody>`;
+  const meta = [['Hora (HH:MM)','hr','hora'],['Latitud (°)','la','lat'],['Altura (m)','al','alt']];
+  for(const [lbl,pre] of meta){
+    t += `<tr class="meta"><td class="row-label">${lbl}</td>`;
+    for(let c=0;c<S.nCols;c++){
+      const arr = pre==='hr'?S.hora:(pre==='la'?S.lat:S.alt);
+      const v = arr[c]!==undefined&&arr[c]!==null?arr[c]:'';
+      const type = pre==='hr'?'text':'number';
+      t += `<td><input type="${type}" step="any" id="${pre}${c}" value="${escapeAttr(String(v))}" placeholder="${pre==='hr'?'07:30':'0'}"></td>`;
+    }
+    t += `</tr>`;
+  }
+  for(let r=0;r<S.nRows;r++){
+    t += `<tr><td class="row-label">Lectura D${r+1}</td>`;
+    for(let c=0;c<S.nCols;c++){
+      const prev = (S.data[r]&&S.data[r][c]!==undefined&&S.data[r][c]!==null)?S.data[r][c]:'';
+      t += `<td><input type="number" step="any" id="c${r}_${c}" value="${prev}" placeholder="0.00"></td>`;
+    }
+    t += `</tr>`;
+  }
+  t += `</tbody></table>`;
+  document.getElementById('dataTableContainer').innerHTML = t;
+}
+function readDataTable(){
+  S.headers=[]; S.hora=[]; S.lat=[]; S.alt=[];
+  for(let c=0;c<S.nCols;c++){
+    const hd=document.getElementById('hd'+c);
+    S.headers[c]= hd?(hd.value.trim()||`Estacion ${c+1}`):`Estacion ${c+1}`;
+    const hr=document.getElementById('hr'+c), la=document.getElementById('la'+c), al=document.getElementById('al'+c);
+    S.hora[c]= hr?hr.value.trim():'';
+    S.lat[c] = la&&la.value!==''?parseFloat(la.value):0;
+    S.alt[c] = al&&al.value!==''?parseFloat(al.value):0;
+  }
+  S.data=[];
+  for(let r=0;r<S.nRows;r++){
+    S.data[r]=[];
+    for(let c=0;c<S.nCols;c++){
+      const el=document.getElementById(`c${r}_${c}`);
+      S.data[r][c]= el&&el.value!==''?parseFloat(el.value):null;
+    }
+  }
+}
+
+/* ── Importación de tablas ── */
+function togglePaste(){ const p=document.getElementById('pastePanel'); p.style.display = p.style.display==='none'?'block':'none'; }
+function parseDelimited(text){
+  const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+  return lines.map(line=>{
+    let delim='\t';
+    if(!line.includes('\t')){ delim = line.includes(';')?';':(line.includes(',')?',':/\s{2,}/); }
+    return (delim instanceof RegExp ? line.trim().split(delim) : line.split(delim)).map(s=>s.trim());
+  });
+}
+function ingestMatrix(M){
+  // quitar filas vacías
+  M = M.filter(r=>r.some(c=>c!==''&&c!==undefined&&c!==null));
+  if(M.length<5){ alert('La tabla necesita al menos 5 filas: nombres, hora, latitud, altura y ≥1 lectura.'); return false; }
+  // detectar columna de etiquetas: si la mayoría de las primeras celdas (filas hora/lat/alt/datos) no son numéricas
+  let nonNum=0, checks=0;
+  for(let i=1;i<M.length;i++){ checks++; if(isNaN(parseFloat(M[i][0]))) nonNum++; }
+  const labelCol = nonNum > checks/2;
+  const c0 = labelCol?1:0;
+  const headers = M[0].slice(c0).map((h,i)=>String(h).trim()||`Estacion ${i+1}`);
+  const nCols = headers.length;
+  const hora = M[1].slice(c0);
+  const lat  = M[2].slice(c0);
+  const alt  = M[3].slice(c0);
+  const dataRows = M.slice(4).map(r=>r.slice(c0));
+  S.nCols = Math.min(12,nCols);
+  S.nRows = Math.min(20,dataRows.length);
+  S.headers = headers.slice(0,S.nCols);
+  S.hora = hora.slice(0,S.nCols).map(x=>String(x).trim());
+  S.lat  = lat.slice(0,S.nCols).map(x=>parseFloat(x));
+  S.alt  = alt.slice(0,S.nCols).map(x=>parseFloat(x));
+  S.data = [];
+  for(let r=0;r<S.nRows;r++){
+    S.data[r]=[];
+    for(let c=0;c<S.nCols;c++){
+      const v = dataRows[r][c];
+      S.data[r][c] = (v===''||v===undefined)?null:parseFloat(v);
+    }
+  }
+  document.getElementById('numCols').value=S.nCols;
+  document.getElementById('numRows').value=S.nRows;
+  document.getElementById('gravLabel3').textContent = GRAV_LABELS[S.grav]+(S.refTable?' (CSV)':'');
+  renderDataTable();
+  return true;
+}
+function importPaste(){
+  const txt=document.getElementById('pasteArea').value;
+  if(!txt.trim()){ alert('Pega una tabla primero.'); return; }
+  if(ingestMatrix(parseDelimited(txt))){ togglePaste(); }
+}
+function loadDataFile(input){
+  const file=input.files[0]; if(!file) return;
+  readTableFile(file, M => ingestMatrix(M));
+  input.value='';
+}
+function loadExample(){
+  // Ejemplo coherente con la tabla seleccionada (estación base + dos derivas)
+  S.nCols=3; S.nRows=3;
+  S.headers=['Base','Punto 2','Punto 3'];
+  S.hora=['07:30','08:15','09:00'];
+  S.lat=[4.60,4.62,4.64];
+  S.alt=[2600,2680,2750];
+  S.data=[[2881.20,2903.50,2935.80],[2881.40,2903.30,2935.60],[2881.30,2903.40,2935.70]];
+  document.getElementById('numCols').value=3;
+  document.getElementById('numRows').value=3;
+  renderDataTable();
+}
+
+/* ════════════════ PASO 4 — preview ════════════════ */
+function goStep4(){
+  readDataTable();
+  document.getElementById('gravLabelPreview').textContent = GRAV_LABELS[S.grav]+(S.refTable?' (CSV)':'');
+  const tbl=curTable();
+  let html='';
+  for(let c=0;c<S.nCols;c++){
+    const med=colMedia(c);
+    if(med===null){ html+=`<p class="hint">⚠ ${S.headers[c]}: sin datos.</p>`; continue; }
+    const cen=cenmenor(med); const lk=lookup(tbl,cen);
+    const idx=tbl.findIndex(r=>r[0]===cen);
+    const s=Math.max(0,idx-2), e=Math.min(tbl.length-1,idx+2);
+    html+=`<div class="lookup-preview"><div class="lookup-header">
+        📌 <strong>${escapeHtml(S.headers[c])}</strong> · media = ${fmt(med,4)} → cenmenorI = <strong>${cen}</strong>
+        → referentII = <strong>${lk.valor.toFixed(2)}</strong> · factor = <strong>${lk.factor.toFixed(5)}</strong>
+      </div><div style="overflow-x:auto"><table class="lookup-tbl"><thead><tr><th>cenmenorI</th><th>referentII</th><th>factor</th></tr></thead><tbody>`;
+    for(let i=s;i<=e;i++){ const row=tbl[i]; const hl=row[0]===cen;
+      html+=`<tr${hl?' class="hl"':''}><td>${row[0]}</td><td>${row[1].toFixed(2)}</td><td>${row[2].toFixed(5)}</td></tr>`; }
+    html+=`</tbody></table></div></div>`;
+  }
+  document.getElementById('lookupPreview').innerHTML=html;
+  goStep(4);
+}
+
+/* ════════════════ CÁLCULO COMPLETO (réplica de process()) ════════════════ */
+let LAST=null;
+function compute(){
+  const tbl=curTable();
+  const ger=trunc5(parseFloat(document.getElementById('gerVal').value)||0);
+  const cols=[];
+  for(let c=0;c<S.nCols;c++){
+    const datos = S.data.map(r=>r[c]).filter(v=>v!==null&&v!==undefined&&!isNaN(v)).map(Number);
+    const media = datos.length?trunc5(datos.reduce((a,b)=>a+b,0)/datos.length):NaN;
+    const cen = isNaN(media)?NaN:floorHundred(media);
+    const lk = isNaN(cen)?{valor:NaN,factor:NaN}:lookup(tbl,cen);
+    const referentII=trunc5(lk.valor), factor=trunc5(lk.factor);
+    const residual=trunc5(media-cen);
+    const superficie=trunc5(residual*factor);
+    const lecminigl=trunc5(referentII+superficie);
+    const clok_h=trunc5(parseTime(S.hora[c]));
+    cols.push({header:S.headers[c], hora:S.hora[c], lat:trunc5(S.lat[c]||0), alt:trunc5(S.alt[c]||0),
+      datos, media, cen, referentII, factor, residual, superficie, lecminigl, clok_h});
+  }
+  // gobs respecto a la columna base (col 0)
+  const lecBase=cols[0].lecminigl;
+  cols.forEach(c=>{ c.gobs=trunc5(ger+(c.lecminigl-lecBase)); });
+  // D_d (deriva) constante y C_d
+  const first=cols[0], last=cols[cols.length-1];
+  const dtTot=last.clok_h-first.clok_h, dgTot=last.gobs-first.gobs;
+  const Dd=(dtTot===0||isNaN(dtTot))?0:trunc5(dgTot/dtTot);
+  cols.forEach((c,i)=>{
+    if(i===0){ c.D_d=0; c.C_d=0; }
+    else { c.D_d=trunc5(Dd); c.C_d = (S.nCols===1)?0:trunc3(Dd*(c.clok_h-first.clok_h)); }
+  });
+  // C_lat
+  const phiB=cols[0].lat, phiBr=phiB*Math.PI/180;
+  cols.forEach(c=>{
+    const dPhi=(c.lat-phiB)*Math.PI/180, Dh=dPhi*R_EARTH;
+    let raw=0.81*Math.sin(2*phiBr)*Dh, sign=1;
+    if(c.lat>phiB) sign=(raw>0)?-1:1;
+    else if(c.lat<phiB) sign=(raw<0)?-1:1;
+    c.C_lat=trunc3(raw*sign);
+  });
+  // C_atmosferica
+  cols.forEach(c=>{ const h=c.alt; c.C_atmo=trunc3(-0.874 + 9.91e-5*h - 3.561e-9*h*h); });
+  // C_alib (aire libre) y C_bug (Bouguer)
+  const hB=cols[0].alt;
+  cols.forEach(c=>{ c.C_alib=trunc3(0.3086*(c.alt-hB)); c.C_bug=trunc3(-0.1119*(c.alt-hB)); });
+  // Σ correcciones (corrección total) y gravedad corregida = gobs + ΣC
+  // Nota: C_d (corrección de deriva) NO se incluye en la suma.  Correcciones a 3 decimales.
+  cols.forEach(c=>{
+    c.C_total = trunc3(c.C_lat + c.C_atmo + c.C_alib + c.C_bug);
+    c.g_corr  = trunc3(c.gobs + c.C_total);
+  });
+  return {cols, ger, Dd};
+}
+
+const RESULT_ROWS = [
+  {k:'media',     l:'📊 Media',              cl:'row-media', d:5},
+  {k:'cen',       l:'▼ Centena menor',       cl:'row-cen',   d:0},
+  {k:'referentII',l:'📋 Valor Tabla II',     cl:'row-ref',   d:5},
+  {k:'factor',    l:'⚙ Factor III',          cl:'row-ref',   d:5},
+  {k:'residual',  l:'△ Residual',            cl:'row-res',   d:5},
+  {k:'superficie',l:'⬛ Residual × Factor',  cl:'row-sup',   d:5},
+  {k:'lecminigl', l:'📐 Lectura mGal',       cl:'row-lec',   d:5},
+  {k:'clok_h',    l:'🕑 clok_h (hora dec.)', cl:'row-lec',   d:5},
+  {k:'gobs',      l:'🎯 gobs',               cl:'row-gob',   d:5},
+  {k:'D_d',       l:'📉 D_d (deriva)',       cl:'row-corr',  d:5},
+  {k:'C_d',       l:'⏱ C_d (corr. deriva)', cl:'row-corr',  d:3},
+  {k:'C_lat',     l:'🌐 C_lat (latitud)',    cl:'row-corr',  d:3},
+  {k:'C_atmo',    l:'🌫 C_atmo',             cl:'row-corr',  d:3},
+  {k:'C_alib',    l:'🎈 C_alib (aire libre)',cl:'row-corr',  d:3},
+  {k:'C_bug',     l:'🪨 C_bug (Bouguer)',    cl:'row-corr',  d:3},
+  {k:'C_total',   l:'Σ Corrección total (sin C_d)', cl:'row-ctot',  d:3},
+  {k:'g_corr',    l:'✅ Gravedad corregida',  cl:'row-gcorr', d:3},
+];
+
+function calcular(){
+  if(!S.data.length){ alert('No hay datos. Vuelve al paso 3.'); return; }
+  LAST=compute();
+  const {cols,ger,Dd}=LAST;
+
+  let chips=`<div class="param-chip">Gravímetro <span>${GRAV_LABELS[S.grav]}${S.refTable?' (CSV)':''}</span></div>
+    <div class="param-chip">ger <span>${fmt(ger,5)}</span></div>
+    <div class="param-chip">D_d <span>${fmt(Dd,5)}</span></div>
+    <div class="param-chip">Base φ <span>${fmt(cols[0].lat,4)}°</span></div>
+    <div class="param-chip">Base h <span>${fmt(cols[0].alt,1)} m</span></div>`;
+  document.getElementById('paramsSummary').innerHTML=chips;
+
+  let t=`<table class="result-table"><thead><tr><th>Parámetro</th>`;
+  for(let c=0;c<S.nCols;c++) t+=`<th>${escapeHtml(S.headers[c])}</th>`;
+  t+=`</tr></thead><tbody>`;
+  // metadatos
+  const metaRows=[['Hora','hora',null],['Latitud (°)','lat',4],['Altura (m)','alt',2]];
+  for(const [lbl,key,dec] of metaRows){
+    t+=`<tr class="row-meta"><td class="row-header">${lbl}</td>`;
+    for(let c=0;c<S.nCols;c++){ const v=cols[c][key]; t+=`<td>${dec===null?escapeHtml(String(v||'—')):fmt(v,dec)}</td>`; }
+    t+=`</tr>`;
+  }
+  // datos
+  for(let r=0;r<S.nRows;r++){
+    t+=`<tr class="row-dato"><td class="row-header">Lectura D${r+1}</td>`;
+    for(let c=0;c<S.nCols;c++){ const v=S.data[r][c]; t+=`<td>${v!==null&&!isNaN(v)?fmt(v,4):'—'}</td>`; }
+    t+=`</tr>`;
+  }
+  t+=`<tr class="row-sep"><td colspan="${S.nCols+1}"></td></tr>`;
+  // resultados
+  for(const row of RESULT_ROWS){
+    t+=`<tr class="${row.cl}"><td class="row-header">${row.l}</td>`;
+    for(let c=0;c<S.nCols;c++){ const v=cols[c][row.k]; t+=`<td>${(v!==null&&v!==undefined&&!isNaN(v))?fmt(v,row.d):'—'}</td>`; }
+    t+=`</tr>`;
+  }
+  t+=`</tbody></table>`;
+  document.getElementById('resultContainer').innerHTML=t;
+  document.getElementById('chartContainer').innerHTML = driftChart(cols);
+  goStep(5);
+}
+
+/* ════════════════ GRÁFICO DE DERIVA (gobs vs hora) ════════════════ */
+function driftChart(cols){
+  const pts = cols.filter(c=>isFinite(c.clok_h)&&isFinite(c.gobs));
+  if(pts.length<2) return '';
+  const W=720,H=300, x0=64,x1=700,y0=30,y1=250;
+  const xs=pts.map(c=>c.clok_h), ys=pts.map(c=>c.gobs);
+  let xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+  if(xmax===xmin){xmax+=1;xmin-=1;} if(ymax===ymin){ymax+=1;ymin-=1;}
+  const padY=(ymax-ymin)*0.15; ymin-=padY; ymax+=padY;
+  const X=v=>x0+(x1-x0)*((v-xmin)/(xmax-xmin));
+  const Y=v=>y1-(y1-y0)*((v-ymin)/(ymax-ymin));
+  let grid='';
+  for(let i=0;i<=4;i++){ const yy=y0+(y1-y0)*i/4; const val=ymax-(ymax-ymin)*i/4;
+    grid+=`<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" stroke="#22304a"/>
+      <text x="${x0-8}" y="${yy+4}" fill="#64748b" font-size="10" text-anchor="end" font-family="Space Mono">${val.toFixed(3)}</text>`; }
+  for(let i=0;i<=4;i++){ const xx=x0+(x1-x0)*i/4; const val=xmin+(xmax-xmin)*i/4;
+    grid+=`<line x1="${xx}" y1="${y0}" x2="${xx}" y2="${y1}" stroke="#22304a"/>
+      <text x="${xx}" y="${y1+16}" fill="#64748b" font-size="10" text-anchor="middle" font-family="Space Mono">${val.toFixed(2)}h</text>`; }
+  // línea de deriva (primero→último)
+  const driftLine=`<line x1="${X(xs[0])}" y1="${Y(ys[0])}" x2="${X(xs[xs.length-1])}" y2="${Y(ys[ys.length-1])}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 4"/>`;
+  // polilínea de puntos
+  let poly='<polyline points="'+pts.map(c=>`${X(c.clok_h).toFixed(1)},${Y(c.gobs).toFixed(1)}`).join(' ')+'" fill="none" stroke="#00d4ff" stroke-width="2"/>';
+  let dots='';
+  pts.forEach(c=>{ dots+=`<circle cx="${X(c.clok_h).toFixed(1)}" cy="${Y(c.gobs).toFixed(1)}" r="5" fill="#7c3aed" stroke="#fff" stroke-width="1"/>
+     <text x="${X(c.clok_h).toFixed(1)}" y="${(Y(c.gobs)-10).toFixed(1)}" fill="#93c5fd" font-size="10" text-anchor="middle" font-family="Space Mono">${escapeHtml(c.header)}</text>`; });
+  return `<div class="chart-box"><h3>Deriva instrumental — gobs vs hora</h3>
+    <p class="cap">Puntos = gobs por estación · línea ámbar punteada = deriva lineal (pendiente D_d).</p>
+    <svg viewBox="0 0 ${W} ${H}">
+      <rect x="${x0}" y="${y0}" width="${x1-x0}" height="${y1-y0}" fill="#0c1018" stroke="#2a3a52"/>
+      ${grid}${driftLine}${poly}${dots}
+      <text x="${(x0+x1)/2}" y="${H-4}" fill="#64748b" font-size="11" text-anchor="middle" font-family="Space Mono">hora decimal (clok_h)</text>
+    </svg></div>`;
+}
+
+/* ════════════════ EXPORTAR ════════════════ */
+function buildMatrix(){
+  const {cols}=LAST;
+  const M=[['Parámetro',...S.headers]];
+  M.push(['Hora',...cols.map(c=>c.hora)]);
+  M.push(['Latitud (°)',...cols.map(c=>c.lat)]);
+  M.push(['Altura (m)',...cols.map(c=>c.alt)]);
+  for(let r=0;r<S.nRows;r++) M.push([`Lectura D${r+1}`,...S.data[r].map(v=>v===null?'':v)]);
+  for(const row of RESULT_ROWS) M.push([row.l.replace(/^[^\sA-Za-z]+\s*/,''),...cols.map(c=>c[row.k])]);
+  return M;
+}
+function exportCSV(){
+  if(!LAST){ alert('Calcula primero.'); return; }
+  const M=buildMatrix();
+  const csv=M.map(r=>r.map(v=>{ const s=String(v??''); return /[",;\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(',')).join('\n');
+  download(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}), `gravimetria_${GRAV_LABELS[S.grav]}.csv`);
+}
+function exportXLSX(){
+  if(!LAST){ alert('Calcula primero.'); return; }
+  if(typeof XLSX==='undefined'){ alert('Exportar Excel requiere conexión (SheetJS). Usa CSV.'); return; }
+  const ws=XLSX.utils.aoa_to_sheet(buildMatrix());
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Resultados');
+  XLSX.writeFile(wb, `gravimetria_${GRAV_LABELS[S.grav]}.xlsx`);
+}
+function download(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+
+/* ════════════════ HELPERS ════════════════ */
+function fmt(v,d=4){
+  if(v===null||v===undefined||isNaN(v)) return '—';
+  return Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function escapeHtml(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+function reiniciar(){
+  S={grav:null,refTable:null,nCols:3,nRows:4,headers:[],hora:[],lat:[],alt:[],data:[],ger:0};
+  LAST=null;
+  for(let i=1;i<=5;i++){
+    document.getElementById('step'+i).classList.remove('active');
+    document.getElementById('sdot'+i).classList.remove('active','done');
+  }
+  step=1;
+  document.getElementById('step1').classList.add('active');
+  document.getElementById('sdot1').classList.add('active');
+  document.getElementById('progFill').style.width='20%';
+  document.querySelectorAll('.grav-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('gravBox').style.display='none';
+  document.getElementById('refTableMsg').textContent='';
+  const b=document.getElementById('btnStep1'); b.disabled=true; b.style.opacity='.4';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+document.getElementById('numCols').addEventListener('input', buildHeaders);
+buildHeaders();
+</script>
+</body>
+</html>
