@@ -658,10 +658,10 @@ function compute(){
   // C_alib (aire libre) y C_bug (Bouguer)
   const hB=cols[0].alt;
   cols.forEach(c=>{ c.C_alib=trunc3(0.3086*(c.alt-hB)); c.C_bug=trunc3(-0.1119*(c.alt-hB)); });
-  // Σ correcciones (corrección total) y gravedad corregida = gobs + ΣC
-  // Nota: C_d (corrección de deriva) NO se incluye en la suma.  Correcciones a 3 decimales.
+  // Σ correcciones (corrección total) = TODAS las correcciones, incluida C_d.
+  // Gravedad corregida = gobs + ΣC.  Correcciones a 3 decimales.
   cols.forEach(c=>{
-    c.C_total = trunc3(c.C_lat + c.C_atmo + c.C_alib + c.C_bug);
+    c.C_total = trunc3(c.C_d + c.C_lat + c.C_atmo + c.C_alib + c.C_bug);
     c.g_corr  = trunc3(c.gobs + c.C_total);
   });
   return {cols, ger, Dd};
@@ -683,7 +683,7 @@ const RESULT_ROWS = [
   {k:'C_atmo',    l:'🌫 C_atmo',             cl:'row-corr',  d:3},
   {k:'C_alib',    l:'🎈 C_alib (aire libre)',cl:'row-corr',  d:3},
   {k:'C_bug',     l:'🪨 C_bug (Bouguer)',    cl:'row-corr',  d:3},
-  {k:'C_total',   l:'Σ Corrección total (sin C_d)', cl:'row-ctot',  d:3},
+  {k:'C_total',   l:'Σ Corrección total',    cl:'row-ctot',  d:3},
   {k:'g_corr',    l:'✅ Gravedad corregida',  cl:'row-gcorr', d:3},
 ];
 
